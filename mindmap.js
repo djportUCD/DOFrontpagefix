@@ -91,12 +91,58 @@ const pendingStrainsRequests = new Map();
 const lineConfigCache = new Map();
 const maxCacheSize = 1000;
 
-// Strain filtering configuration
+// Strain filtering configuration - loaded from JSON
+let strainFilterConfig = null;
+let filteredCollections = new Set();
+
+// Default blacklist (fallback if config fails to load)
 const STRAIN_SOURCE_BLACKLIST = [
     'Beta Cell Biology Consortium',
     'Beutler Mutagenetix',
     'UC Davis NeuroMab Hybridomas'
 ];
+
+// Load strain filter configuration
+async function loadStrainFilterConfig() {
+    try {
+        const response = await fetch('strain-filter-config.json');
+        if (response.ok) {
+            strainFilterConfig = await response.json();
+            
+            // Build set of disabled collections
+            filteredCollections.clear();
+            if (strainFilterConfig && strainFilterConfig.collections) {
+                for (const [collectionName, config] of Object.entries(strainFilterConfig.collections)) {
+                    if (config.enabled === false) {
+                        filteredCollections.add(collectionName);
+                    }
+                }
+            }
+            
+            console.log('Strain filter config loaded:', filteredCollections.size, 'collections disabled');
+            return true;
+        }
+    } catch (error) {
+        console.warn('Failed to load strain filter config, using defaults:', error);
+        // Fallback to hardcoded blacklist
+        filteredCollections = new Set(STRAIN_SOURCE_BLACKLIST);
+    }
+    return false;
+}
+
+// Check if strain should be filtered based on config
+function isStrainFiltered(strain) {
+    if (!strain.source_collection) {
+        return false; // Don't filter strains without collection info
+    }
+    
+    // Use loaded config if available, otherwise use blacklist
+    if (filteredCollections.size > 0) {
+        return filteredCollections.has(strain.source_collection);
+    }
+    
+    return STRAIN_SOURCE_BLACKLIST.includes(strain.source_collection);
+}
 
 // PERFORMANCE OPTIMIZATION: Debounced API calls
 let hoverApiTimeout = null;
@@ -130,27 +176,24 @@ function setCachedTerm(id, data) {
 
 // Strain filtering functions
 function isStrainBlacklisted(strain) {
-    return strain.source_collection && 
-           STRAIN_SOURCE_BLACKLIST.includes(strain.source_collection);
+    return isStrainFiltered(strain);
 }
 
 function filterAndGroupStrains(strains) {
     const visibleStrains = [];
-    const hiddenStrainsByCollection = {};
     
+    // Get max strains setting from config
+    const maxStrains = strainFilterConfig?.settings?.maxStrainsToDisplay || 1000;
+    
+    // Silently filter out disabled collections
     strains.forEach(strain => {
-        if (isStrainBlacklisted(strain)) {
-            const collection = strain.source_collection || 'Unknown Source';
-            if (!hiddenStrainsByCollection[collection]) {
-                hiddenStrainsByCollection[collection] = [];
-            }
-            hiddenStrainsByCollection[collection].push(strain);
-        } else {
+        if (!isStrainFiltered(strain) && visibleStrains.length < maxStrains) {
             visibleStrains.push(strain);
         }
     });
     
-    return { visibleStrains, hiddenStrainsByCollection };
+    // Return only visible strains, no hidden groups shown to user
+    return { visibleStrains, hiddenStrainsByCollection: {} };
 }
 
 // Enhanced API functions with caching
@@ -2431,64 +2474,7 @@ function renderStrains(goId, strains, strainList) {
                 ).join('');
             }
             
-            // Add hidden strains sections grouped by collection
-            const collectionNames = Object.keys(hiddenStrainsByCollection);
-            if (collectionNames.length > 0) {
-                html += `<li class="mt-4 pt-2 border-t border-gray-200">`;
-                
-                collectionNames.forEach(collection => {
-                    const collectionStrains = hiddenStrainsByCollection[collection];
-                    const collectionId = collection.replace(/\s+/g, '-').toLowerCase();
-                    
-                    html += `
-                        <div class="mb-3">
-                            <button id="toggle-collection-${collectionId}-${goId}" class="text-sm text-gray-600 hover:text-blue-600 cursor-pointer underline">
-                                Show ${collectionStrains.length} ${collection}
-                            </button>
-                            <ul id="collection-strains-${collectionId}-${goId}" class="mt-2 hidden">
-                                ${collectionStrains.map(strain => 
-                                    `<li class="my-2 px-2 py-1 rounded bg-red-50 border-l-2 border-red-200">
-                                    <a href="https://www.mmrrc.org/catalog/sds.php?mmrrc_id=${strain.mmrrc_id}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline block leading-tight">
-                                        ${strain.strain_name}
-                                    </a>
-                    <div class="text-xs text-gray-500 leading-tight" style="font-size: 8px;">
-                                        ${strain.source_collection || 'Unknown Source'}
-                                    </div>
-                                    </li>`
-                                ).join('')}
-                            </ul>
-                        </div>
-                    `;
-                });
-                
-                html += `</li>`;
-            }
-            
             strainList.innerHTML = html;
-            
-            // Add toggle functionality for each collection
-            collectionNames.forEach(collection => {
-                const collectionStrains = hiddenStrainsByCollection[collection];
-                const collectionId = collection.replace(/\s+/g, '-').toLowerCase();
-                
-                const toggleButton = document.getElementById(`toggle-collection-${collectionId}-${goId}`);
-                const strainsContainer = document.getElementById(`collection-strains-${collectionId}-${goId}`);
-                
-                if (toggleButton && strainsContainer) {
-                    let isVisible = false;
-                    
-                    toggleButton.addEventListener('click', () => {
-                        isVisible = !isVisible;
-                        if (isVisible) {
-                            strainsContainer.classList.remove('hidden');
-                            toggleButton.textContent = `Hide ${collectionStrains.length} ${collection}`;
-                        } else {
-                            strainsContainer.classList.add('hidden');
-                            toggleButton.textContent = `Show ${collectionStrains.length} ${collection}`;
-                        }
-                    });
-                }
-            });
             
         } else {
             strainList.innerHTML = '<li class="text-gray-500">No linked strains found</li>';
@@ -2726,6 +2712,9 @@ canvas.addEventListener("wheel", (e) => {
 
 async function init() {
     console.log("Initializing optimized mind map...");
+    
+    // Load strain filter configuration first
+    await loadStrainFilterConfig();
     
     // Initialize web worker for layout calculations
     try {

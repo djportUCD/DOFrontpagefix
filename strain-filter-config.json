@@ -1,0 +1,110 @@
+{
+  "description": "Configuration for filtering strain collections. Set 'enabled' to false to exclude a collection from API results. This filtering happens silently - users won't see disabled collections at all.",
+  "collections": {
+    "BaSH EUCOMM": {
+      "enabled": true
+    },
+    "BayGenomics/NHLBI": {
+      "enabled": true
+    },
+    "Beta Cell Biology Consortium": {
+      "enabled": false
+    },
+    "Beutler Mutagenetix": {
+      "enabled": false
+    },
+    "CMGCC/NIEHS": {
+      "enabled": true
+    },
+    "Collaborative Cross": {
+      "enabled": true
+    },
+    "Collaborative Cross iPS Cell Lines": {
+      "enabled": true
+    },
+    "Consortium Functional Glycomics": {
+      "enabled": true
+    },
+    "CvDC/B2B": {
+      "enabled": true
+    },
+    "Deltagen": {
+      "enabled": true
+    },
+    "ENCODE": {
+      "enabled": true
+    },
+    "Genentech": {
+      "enabled": true
+    },
+    "GENSAT/NINDS": {
+      "enabled": true
+    },
+    "Human Element Enhancers": {
+      "enabled": true
+    },
+    "IDG": {
+      "enabled": true
+    },
+    "Keck miRNA Knockout Lines": {
+      "enabled": true
+    },
+    "KOMP": {
+      "enabled": true
+    },
+    "Lexicon": {
+      "enabled": true
+    },
+    "Mammalian Pigmentation": {
+      "enabled": true
+    },
+    "Mutagenesis for Dev. Defects": {
+      "enabled": true
+    },
+    "Nagy Basic ES Cell Lines": {
+      "enabled": true
+    },
+    "Neuroscience Blueprint cre/NIH": {
+      "enabled": true
+    },
+    "NHMRC Australian PhenomeBank": {
+      "enabled": true
+    },
+    "Peromyscus Mice": {
+      "enabled": true
+    },
+    "Pleiades Promoter Project": {
+      "enabled": true
+    },
+    "Pleiades Promoter/CanEuCre": {
+      "enabled": true
+    },
+    "Precision Genetically-Humanized Models": {
+      "enabled": true
+    },
+    "Sanger EUCOMM Collection": {
+      "enabled": true
+    },
+    "Sanger miRNA Knockout Lines": {
+      "enabled": true
+    },
+    "Sanger Inst. Gene Trap Res.": {
+      "enabled": true
+    },
+    "Soriano Gene Trap Lines": {
+      "enabled": true
+    },
+    "The EUCOMM Collection at UC Davis": {
+      "enabled": true
+    },
+    "UC Davis NeuroMab Hybridomas": {
+      "enabled": false
+    }
+  },
+  "settings": {
+    "description": "Global settings for strain display",
+    "silentFiltering": true,
+    "maxStrainsToDisplay": 1000,
+    "cacheResults": true
+  }
+}
