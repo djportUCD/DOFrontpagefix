@@ -1,0 +1,621 @@
+/*!
+ * MMRRC GO Term Mind Map — Modernized (Bootstrap 3 friendly)
+ * - Keeps original IDs/classes for JS compatibility
+ * - Adds subtle glass, elevation, smooth motion, and improved focus states
+ * - Falls back gracefully where backdrop-filter isn't supported
+ */
+
+/* ---------------------------
+   Theme Tokens (with fallbacks)
+---------------------------- */
+:root {
+    --mmrrc-primary: #2563eb;            /* accent */
+    --mmrrc-primary-600: #1f46c7;
+    --surface: #ffffff;
+    --surface-2: rgba(255,255,255,0.92); /* used for frosted overlays */
+    --text-900: #0f172a;
+    --text-700: #334155;
+    --text-600: #475569;
+    --text-500: #64748b;
+    --border: rgba(15, 23, 42, 0.12);
+    --ring: rgba(37, 99, 235, 0.35);
+    --shadow-1: 0 1px 2px rgba(16,24,40,0.08), 0 1px 1px rgba(16,24,40,0.06);
+    --shadow-2: 0 8px 24px rgba(16,24,40,0.12), 0 2px 6px rgba(16,24,40,0.06);
+    --shadow-3: 0 16px 40px rgba(16,24,40,0.16), 0 2px 10px rgba(16,24,40,0.08);
+}
+
+/* --------------------------------
+   Canvas container & drawing area
+---------------------------------- */
+.canvas-wrapper {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); /* gentle depth */
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    min-height: 750px;
+    box-shadow: var(--shadow-1);
+}
+
+.infinite-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    cursor: pointer;
+    background:
+            radial-gradient(1200px 1200px at 30% 20%, rgba(37, 99, 235, 0.06) 0%, rgba(37, 99, 235, 0) 60%),
+            #fafafa;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.infinite-canvas.dragging-node,
+.infinite-canvas.dragging-canvas {
+    cursor: -webkit-grabbing;
+    cursor: grabbing;
+}
+
+/* --------------------------------
+   Legend trigger (Info button)
+---------------------------------- */
+.info-icon {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1035;
+}
+
+/* --------------------------------
+   Zoom Controls
+---------------------------------- */
+.zoom-controls {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 1035;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 8px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(10px);
+}
+
+.zoom-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid rgba(37, 99, 235, 0.2);
+    border-radius: 8px;
+    background: linear-gradient(135deg, #ffffff, #f8fafc);
+    color: var(--mmrrc-primary, #2563eb);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    transition: all 0.15s ease;
+}
+
+.zoom-btn .glyphicon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.zoom-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+    background: linear-gradient(135deg, var(--mmrrc-primary, #2563eb), var(--mmrrc-primary-600, #1f46c7));
+    color: #fff;
+    border-color: transparent;
+}
+
+.zoom-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.zoom-level-display {
+    text-align: center;
+    padding: 6px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--mmrrc-primary, #2563eb);
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(37, 99, 235, 0.02));
+    border-radius: 6px;
+    margin-top: 2px;
+}
+
+.info-icon {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1035;
+}
+
+.info-icon.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--mmrrc-primary, #2563eb), var(--mmrrc-primary-600, #1f46c7));
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    -webkit-appearance: none;
+}
+
+.info-icon.btn .glyphicon {
+    color: #fff;
+    font-size: 16px;
+    line-height: 1;
+}
+
+/* Hover & focus states */
+.info-icon.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    opacity: 0.95;
+}
+
+.info-icon.btn:focus,
+.info-icon.btn:active {
+    outline: none;
+    box-shadow:
+            0 0 0 3px rgba(37, 99, 235, 0.35),
+            0 4px 10px rgba(0, 0, 0, 0.15);
+    transform: translateY(0);
+}
+
+/* Fix Bootstrap active/focus flicker */
+.info-icon.btn:active,
+.info-icon.btn.active {
+    background: linear-gradient(135deg, var(--mmrrc-primary-600, #1f46c7), var(--mmrrc-primary, #2563eb));
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(1px);
+}
+
+
+/* --------------------------------
+   Legend overlay
+---------------------------------- */
+/* Container that positions the Bootstrap panel */
+.legend-panel {
+    position: absolute;
+    top: 12px;
+    right: 58px; /* leave space for the info button */
+    width: 280px;
+    z-index: 1036;
+    display: none;       /* JS toggles */
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+}
+
+.legend-panel.visible {
+    display: block;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* Make the inner Bootstrap panel feel "cardy" and frosted */
+.legend-panel .panel {
+    background: var(--surface-2);
+    border-color: var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-2);
+    -webkit-backdrop-filter: saturate(130%) blur(10px);
+    backdrop-filter: saturate(130%) blur(10px);
+}
+.legend-panel .panel-heading {
+    position: relative;
+    padding: 10px 40px 10px 14px;
+    color: var(--text-900);
+    background: linear-gradient(180deg, rgba(37,99,235,0.08), rgba(37,99,235,0.02));
+    border-bottom: 1px solid var(--border);
+}
+.legend-panel .panel-body {
+    padding: 12px 14px;
+}
+.legend-panel .close,
+.legend-panel .close-button {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    margin-top: -10px;
+    float: none;
+    opacity: .6;
+    transition: opacity .15s ease, transform .15s ease;
+}
+.legend-panel .close:hover,
+.legend-panel .close:focus,
+.legend-panel .close-button:hover {
+    opacity: 1;
+    transform: rotate(90deg);
+}
+
+/* Legend list */
+.legend-list {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+}
+.legend-list li,
+.legend-item {
+    margin: 8px 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-700);
+    display: flex;
+    align-items: center;
+}
+.legend-line {
+    display: inline-block;
+    width: 32px;
+    height: 4px;
+    margin-right: 8px;
+    vertical-align: middle;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+}
+
+/* --------------------------------
+   Hover Panel (follows cursor)
+---------------------------------- */
+/* Markup: <div class="hover-panel panel panel-info">… */
+.hover-panel {
+    position: absolute;
+    z-index: 1037;
+    min-width: 260px;
+    max-width: 360px;
+    display: none;          /* JS toggles */
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity .15s ease, transform .15s ease;
+}
+.hover-panel.visible {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Card-like look, with frosted fallback */
+.hover-panel.panel {
+    background: var(--surface-2);
+    border-color: var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-2);
+    -webkit-backdrop-filter: saturate(130%) blur(10px);
+    backdrop-filter: saturate(130%) blur(10px);
+}
+.hover-panel .panel-heading {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(37,99,235,0.06), rgba(37,99,235,0.02));
+}
+.hover-panel .panel-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-900);
+}
+.hover-panel .panel-body {
+    padding: 10px 12px;
+}
+.hover-panel p {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: var(--text-600);
+    line-height: 1.5;
+}
+.hover-panel .term-id {
+    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-size: 12px;
+    color: var(--text-500);
+    margin: 6px 0 0;
+}
+.hover-panel .loading {
+    color: var(--text-500);
+    font-style: italic;
+}
+
+/* Optional small caret */
+.hover-panel:after {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 18px;
+    width: 10px;
+    height: 10px;
+    background: var(--surface-2);
+    transform: rotate(45deg);
+    border-left: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+    box-shadow: -2px -2px 4px rgba(16,24,40,0.03);
+}
+
+/* --------------------------------
+   Toast Notification
+---------------------------------- */
+/* Markup: <div class="toast-notification alert alert-warning">… */
+.toast-notification {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%) translateY(6px);
+    z-index: 1038;
+    display: none;      /* JS toggles */
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .2s ease, transform .2s ease;
+    padding: 10px 14px;
+    border-radius: 9999px;            /* pill */
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-2);
+    -webkit-backdrop-filter: saturate(130%) blur(10px);
+    backdrop-filter: saturate(130%) blur(10px);
+}
+.toast-notification.visible {
+    display: block;
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* --------------------------------
+   Details Panel (right column)
+---------------------------------- */
+/* ---------- Details Card (right column) ---------- */
+.details-card {
+    border-radius: 12px;
+    border-color: var(--border);
+    box-shadow: var(--shadow-1);
+    overflow: hidden;
+}
+
+.details-card .panel-heading {
+    background: linear-gradient(180deg, rgba(37,99,235,0.08), rgba(37,99,235,0.02));
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+}
+
+.details-heading {
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    align-items: center;
+    gap: 10px;
+}
+
+.details-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, var(--mmrrc-primary), var(--mmrrc-primary-600));
+    color: #fff;
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    align-items: center;
+    -webkit-box-pack: center;
+    -ms-flex-pack: center;
+    justify-content: center;
+    box-shadow: var(--shadow-2);
+    font-size: 14px;
+}
+
+.details-headings .panel-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-900);
+    line-height: 1.2;
+}
+.details-headings small {
+    display: block;
+    color: var(--text-600);
+}
+
+.details-count {
+    margin-left: auto;
+    border-radius: 9999px;
+    padding: 4px 8px;
+    line-height: 1;
+}
+
+.details-body {
+    color: var(--text-700);
+    padding: 12px;
+}
+
+.details-divider {
+    margin: 10px 0 12px;
+    border-top: 1px solid var(--border);
+}
+
+.details-tools .input-group .form-control {
+    border-color: var(--border);
+    box-shadow: none;
+}
+.details-tools .input-group-addon {
+    background: #fff;
+    border-color: var(--border);
+}
+.details-tools .btn {
+    border-color: var(--border);
+}
+
+/* Section label */
+.section-title {
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: 11px;
+    color: var(--text-600);
+    margin: 12px 0 6px;
+}
+
+/* ---------- Strain list styles ---------- */
+#details.panel {
+    border-radius: 12px;
+    border: 1px solid rgba(15,23,42,0.12);
+    box-shadow: 0 1px 2px rgba(16,24,40,0.08), 0 1px 1px rgba(16,24,40,0.06);
+    overflow: hidden;
+}
+
+#details .panel-heading {
+    background: linear-gradient(180deg, rgba(37,99,235,0.08), rgba(37,99,235,0.02));
+    border-bottom: 1px solid rgba(15,23,42,0.12);
+    padding: 10px 12px;
+}
+
+#details .panel-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+#details .panel-body {
+    padding: 12px;
+    color: #334155;
+    overflow-x: hidden;
+}
+
+#term-info { 
+    margin-bottom: 12px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+#term-info h3 {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 0 0 6px 0;
+    word-break: break-word;
+    color: #0f172a;
+}
+
+#term-info p {
+    font-size: 11px;
+    color: #64748b;
+    margin: 0;
+    word-break: break-all;
+}
+
+#details .panel-body > h5 {
+    margin-top: 0;              /* replaces inline style */
+    margin-bottom: 8px;
+    font-size: 12px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #475569;
+}
+
+/* ---- Strain list ---- */
+#strainList {
+    margin: 0;
+    padding: 0;                 /* keep UL, style like a modern list */
+    max-height: 750px;
+    overflow: auto;
+}
+
+#strainList li {
+    background: #ffffff;
+    border: 1px solid rgba(15,23,42,0.12);
+    border-radius: 10px;
+    padding: 10px 12px;
+    line-height: 1.35;
+    box-shadow: 0 1px 2px rgba(16,24,40,0.06);
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background-color .12s ease;
+}
+
+#strainList li + li { margin-top: 8px; }
+
+#strainList li:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(16,24,40,0.12), 0 2px 6px rgba(16,24,40,0.06);
+    border-color: rgba(37,99,235,0.25);
+    background-color: #fcfdff;
+}
+
+/* If list items contain links, make them feel tappable */
+#strainList a {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 600;
+}
+#strainList a:hover,
+#strainList a:focus {
+    color: #1f4fcf;
+    text-decoration: underline;
+    outline: none;
+}
+
+/* Subtle metadata text inside items (if present) */
+#strainList small,
+#strainList .text-muted {
+    color: #64748b;
+}
+
+/* Scrollbar polish (WebKit) */
+#strainList::-webkit-scrollbar { width: 8px; }
+#strainList::-webkit-scrollbar-thumb { background: rgba(15,23,42,0.2); border-radius: 10px; }
+#strainList::-webkit-scrollbar-track { background: transparent; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    #strainList li,
+    #strainList li:hover {
+        transition: none !important;
+        transform: none !important;
+    }
+}
+
+/* --------------------------------
+   Reduced motion & dark mode
+---------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+    .legend-panel,
+    .hover-panel,
+    .toast-notification {
+        transition: none !important;
+    }
+}
+
+/* Optional dark theme:
+   Add `data-theme="dark"` to <body> (or a wrapping container) to activate. */
+[data-theme="dark"] {
+    --surface: #0b1220;
+    --surface-2: rgba(11,18,32,0.8);
+    --text-900: #e5e7eb;
+    --text-700: #cbd5e1;
+    --text-600: #cbd5e1;
+    --text-500: #94a3b8;
+    --border: rgba(203,213,225,0.18);
+    --ring: rgba(37, 99, 235, 0.45);
+}
+[data-theme="dark"] .canvas-wrapper {
+    background: linear-gradient(180deg, #0b1220 0%, #0e1628 100%);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5), 0 1px 1px rgba(0,0,0,0.4);
+}
+[data-theme="dark"] .infinite-canvas {
+    background:
+            radial-gradient(1200px 1200px at 30% 20%, rgba(37, 99, 235, 0.18) 0%, rgba(37, 99, 235, 0) 60%),
+            #0e1628;
+}

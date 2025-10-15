@@ -26,6 +26,22 @@
                                 <div id="canvas-wrapper" class="canvas-wrapper">
                                     <canvas id="canvas" class="infinite-canvas" width="2000" height="2000"></canvas>
 
+                                    <!-- Zoom Controls -->
+                                    <div class="zoom-controls">
+                                        <button id="zoom-in" type="button" class="btn btn-default btn-sm zoom-btn" title="Zoom In">
+                                            <span class="glyphicon glyphicon-plus" aria-hidden="true"></span>
+                                        </button>
+                                        <button id="zoom-out" type="button" class="btn btn-default btn-sm zoom-btn" title="Zoom Out">
+                                            <span class="glyphicon glyphicon-minus" aria-hidden="true"></span>
+                                        </button>
+                                        <button id="zoom-reset" type="button" class="btn btn-default btn-sm zoom-btn" title="Reset Zoom">
+                                            <span class="glyphicon glyphicon-screenshot" aria-hidden="true"></span>
+                                        </button>
+                                        <div class="zoom-level-display">
+                                            <span id="zoom-percentage">100%</span>
+                                        </div>
+                                    </div>
+
                                     <!-- Info / Legend toggle -->
                                     <button id="info-icon" type="button" class="btn btn-default btn-xs info-icon" title="Legend">
                                         <span class="glyphicon glyphicon-info-sign" aria-hidden="true"></span>

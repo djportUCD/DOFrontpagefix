@@ -2825,5 +2825,86 @@ function cleanup() {
 // Handle page unload
 window.addEventListener('beforeunload', cleanup);
 
+// Zoom control handlers
+function updateZoomDisplay() {
+    const zoomPercentage = document.getElementById('zoom-percentage');
+    if (zoomPercentage) {
+        zoomPercentage.textContent = Math.round(zoomLevel * 100) + '%';
+    }
+}
+
+function handleZoomIn() {
+    if (zoomLevel < maxZoom) {
+        const oldZoom = zoomLevel;
+        zoomLevel = Math.min(maxZoom, zoomLevel + zoomSpeed);
+        
+        // Zoom towards center
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
+        panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
+        
+        updateZoomDisplay();
+        redrawCanvas();
+    }
+}
+
+function handleZoomOut() {
+    if (zoomLevel > minZoom) {
+        const oldZoom = zoomLevel;
+        zoomLevel = Math.max(minZoom, zoomLevel - zoomSpeed);
+        
+        // Zoom from center
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
+        panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
+        
+        updateZoomDisplay();
+        redrawCanvas();
+    }
+}
+
+function handleZoomReset() {
+    zoomLevel = 1;
+    panX = 0;
+    panY = 0;
+    updateZoomDisplay();
+    redrawCanvas();
+}
+
+// Initialize zoom controls
+document.addEventListener('DOMContentLoaded', () => {
+    const zoomInBtn = document.getElementById('zoom-in');
+    const zoomOutBtn = document.getElementById('zoom-out');
+    const zoomResetBtn = document.getElementById('zoom-reset');
+    
+    if (zoomInBtn) {
+        zoomInBtn.addEventListener('click', handleZoomIn);
+    }
+    
+    if (zoomOutBtn) {
+        zoomOutBtn.addEventListener('click', handleZoomOut);
+    }
+    
+    if (zoomResetBtn) {
+        zoomResetBtn.addEventListener('click', handleZoomReset);
+    }
+    
+    // Initial zoom display
+    updateZoomDisplay();
+    
+    // Update zoom display on mouse wheel
+    const originalWheelHandler = canvas.onwheel;
+    canvas.addEventListener('wheel', (e) => {
+        // Let the existing wheel handler run first
+        if (originalWheelHandler) {
+            originalWheelHandler.call(canvas, e);
+        }
+        // Then update display
+        setTimeout(updateZoomDisplay, 0);
+    });
+});
+
 // Start when page loads
 document.addEventListener('DOMContentLoaded', init);
