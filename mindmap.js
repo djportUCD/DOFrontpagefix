@@ -1,5 +1,5 @@
 // Enter the url of the backend api
-const apiUrl = 'http://localhost:3000/api'
+const apiUrl = 'https://api.mmrrc.org/api/v1';
 
 const ROOT_TERMS = [
     "GO:0008150",
@@ -54,6 +54,18 @@ let rippleAnimationId = null;
 let shrinkingNodes = new Set();
 let shrinkingAnimationId = null;
 
+// Focus mode variables
+let focusMode = false;
+let focusedNodeId = null;
+let focusedRelationships = new Set();
+let focusResetTimer = null;
+let focusAnimationId = null;
+let focusAnimationStartTime = null;
+let focusTransitioning = false;
+const focusOpacity = 0.15; // 15% transparency for non-focused elements
+const focusDuration = 5000; // 5 seconds
+const focusTransitionDuration = 800; // Animation duration for fade transition
+
 // Web Worker for layout calculations
 let layoutWorker = null;
 let workerBusy = false;
@@ -68,6 +80,23 @@ let isMouseOverCanvas = false;
 // PERFORMANCE OPTIMIZATION: API response cache
 const termCache = new Map();
 const cacheTimeout = 5 * 60 * 1000; // 5 minutes
+
+// PERFORMANCE OPTIMIZATION: Strain cache
+const strainsCache = new Map();
+
+// PERFORMANCE OPTIMIZATION: Request deduplication for strains
+const pendingStrainsRequests = new Map();
+
+// PERFORMANCE OPTIMIZATION: Line configuration cache
+const lineConfigCache = new Map();
+const maxCacheSize = 1000;
+
+// Strain filtering configuration
+const STRAIN_SOURCE_BLACKLIST = [
+    'Beta Cell Biology Consortium',
+    'Beutler Mutagenetix',
+    'UC Davis NeuroMab Hybridomas'
+];
 
 // PERFORMANCE OPTIMIZATION: Debounced API calls
 let hoverApiTimeout = null;
@@ -99,6 +128,31 @@ function setCachedTerm(id, data) {
     });
 }
 
+// Strain filtering functions
+function isStrainBlacklisted(strain) {
+    return strain.source_collection && 
+           STRAIN_SOURCE_BLACKLIST.includes(strain.source_collection);
+}
+
+function filterAndGroupStrains(strains) {
+    const visibleStrains = [];
+    const hiddenStrainsByCollection = {};
+    
+    strains.forEach(strain => {
+        if (isStrainBlacklisted(strain)) {
+            const collection = strain.source_collection || 'Unknown Source';
+            if (!hiddenStrainsByCollection[collection]) {
+                hiddenStrainsByCollection[collection] = [];
+            }
+            hiddenStrainsByCollection[collection].push(strain);
+        } else {
+            visibleStrains.push(strain);
+        }
+    });
+    
+    return { visibleStrains, hiddenStrainsByCollection };
+}
+
 // Enhanced API functions with caching
 async function fetchGOTerm(id) {
     // Check cache first
@@ -108,7 +162,7 @@ async function fetchGOTerm(id) {
     }
 
     try {
-    const res = await fetch(`${apiUrl}/go/${encodeURIComponent(id)}`);
+    const res = await fetch(`${apiUrl}/go/getGoTerm/${encodeURIComponent(id)}`);
     if (res.ok) {
         const data = await res.json();
         setCachedTerm(id, data);
@@ -146,9 +200,6 @@ if (uncachedIds.length === 0) {
 try {
     const res = await fetch(`${apiUrl}/go/batch`, {
     method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-    },
     body: JSON.stringify({ ids: uncachedIds })
     });
     
@@ -185,7 +236,7 @@ try {
 
 async function fetchChildren(id) {
     try {
-    const res = await fetch(`${apiUrl}/go/children/${encodeURIComponent(id)}`);
+    const res = await fetch(`${apiUrl}/go/getChildren/${encodeURIComponent(id)}`);
     return res.ok ? await res.json() : [];
     } catch (error) {
     console.error('Error fetching children:', error);
@@ -263,7 +314,7 @@ function getHoveredNodeOptimized(mouseX, mouseY) {
         const dy = mousePos.y - node.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         
-        if (distance <= 40) {
+        if (distance <= 53) {
         return node;
         }
     }
@@ -664,6 +715,121 @@ function getShrinkScale(nodeId) {
     return scale;
 }
 
+// Focus mode functions
+function startFocusMode(parentNodeId) {
+    // Clear any existing focus timer
+    if (focusResetTimer) {
+        clearTimeout(focusResetTimer);
+        focusResetTimer = null;
+    }
+    
+    // Cancel any ongoing focus animation
+    if (focusAnimationId) {
+        cancelAnimationFrame(focusAnimationId);
+        focusAnimationId = null;
+    }
+    
+    // Reset animation state
+    focusTransitioning = false;
+    focusAnimationStartTime = null;
+    
+    focusMode = true;
+    focusedNodeId = parentNodeId;
+    focusedRelationships.clear();
+    
+    // Add parent node to focused relationships
+    focusedRelationships.add(parentNodeId);
+    
+    // Add all visible children to focused relationships
+    const parentNode = nodes[parentNodeId];
+    if (parentNode && parentNode.children) {
+        for (const childId of parentNode.children) {
+            if (nodes[childId] && nodes[childId].visible !== false) {
+                focusedRelationships.add(childId);
+            }
+        }
+    }
+    
+    // Trigger redraw to apply opacity changes
+    requestRedraw();
+    
+    // Set timer to reset focus mode after 5 seconds
+    focusResetTimer = setTimeout(() => {
+        resetFocusMode();
+    }, focusDuration);
+}
+
+function resetFocusMode() {
+    if (focusResetTimer) {
+        clearTimeout(focusResetTimer);
+        focusResetTimer = null;
+    }
+    
+    if (!focusMode) return; // Already reset
+    
+    // Start fade transition animation
+    focusTransitioning = true;
+    focusAnimationStartTime = Date.now();
+    
+    // Cancel any existing focus animation
+    if (focusAnimationId) {
+        cancelAnimationFrame(focusAnimationId);
+    }
+    
+    // Start animation loop
+    focusAnimationId = requestAnimationFrame(animateFocusTransition);
+}
+
+function animateFocusTransition() {
+    const elapsed = Date.now() - focusAnimationStartTime;
+    const progress = Math.min(elapsed / focusTransitionDuration, 1);
+    
+    // Use easing function for smooth transition (ease-out)
+    const easedProgress = 1 - Math.pow(1 - progress, 3);
+    
+    if (progress >= 1) {
+        // Animation complete - fully reset focus mode
+        focusMode = false;
+        focusedNodeId = null;
+        focusedRelationships.clear();
+        focusTransitioning = false;
+        focusAnimationId = null;
+        focusAnimationStartTime = null;
+    } else {
+        // Continue animation
+        focusAnimationId = requestAnimationFrame(animateFocusTransition);
+    }
+    
+    // Trigger redraw to update opacity
+    requestRedraw();
+}
+
+function getFocusOpacity(nodeId) {
+    if (!focusMode && !focusTransitioning) return 1.0;
+    
+    // If this node is part of the focused relationship, show at full opacity
+    if (focusedRelationships.has(nodeId)) {
+        return 1.0;
+    }
+    
+    // Calculate opacity for non-focused elements
+    let targetOpacity = focusOpacity;
+    
+    // If transitioning, animate back to full opacity
+    if (focusTransitioning && focusAnimationStartTime !== null) {
+        const elapsed = Date.now() - focusAnimationStartTime;
+        const progress = Math.min(elapsed / focusTransitionDuration, 1);
+        
+        // Use easing function for smooth transition (ease-out)
+        const easedProgress = 1 - Math.pow(1 - progress, 3);
+        
+        // Interpolate from focusOpacity to 1.0
+        targetOpacity = focusOpacity + (1.0 - focusOpacity) * easedProgress;
+    }
+    
+    return targetOpacity;
+}
+
 function drawRipples() {
     for (let i = ripples.length - 1; i >= 0; i--) {
     const ripple = ripples[i];
@@ -757,12 +923,12 @@ function showToast() {
     }, 2000);
 }
 
-function drawLine(x1, y1, x2, y2, relation_type) {
+function drawLine(x1, y1, x2, y2, relation_type, parentId = null, childId = null) {
     const startX = (x1 * zoomLevel) + panX;
     const startY = (y1 * zoomLevel) + panY;
     const endX = (x2 * zoomLevel) + panX;
     const endY = (y2 * zoomLevel) + panY;
-    const radius = 40 * zoomLevel;
+    const radius = 53 * zoomLevel;
     
     // Calculate line direction
     const dx = endX - startX;
@@ -782,6 +948,17 @@ function drawLine(x1, y1, x2, y2, relation_type) {
     const endOffsetY = endY - (dirY * radius);
     
     ctx.save();
+    
+    // Apply focus mode opacity if active
+    if (focusMode && parentId && childId) {
+        const parentOpacity = getFocusOpacity(parentId);
+        const childOpacity = getFocusOpacity(childId);
+        // Use the minimum opacity of the connected nodes
+        const lineOpacity = Math.min(parentOpacity, childOpacity);
+        if (lineOpacity < 1.0) {
+            ctx.globalAlpha = lineOpacity;
+        }
+    }
     
     // Create gradient for line that fades near circles
     const gradient = ctx.createLinearGradient(startOffsetX, startOffsetY, endOffsetX, endOffsetY);
@@ -819,15 +996,175 @@ function transformNodeLabel(label) {
     return transformed;
 }
 
+function generateLineConfigurations(words, maxLines = 3) {
+    if (words.length === 1) {
+        return [[words[0]]];
+    }
+    
+    const configurations = [];
+    
+    // Try different number of lines from 1 to maxLines
+    for (let numLines = 1; numLines <= Math.min(maxLines, words.length); numLines++) {
+        if (numLines === 1) {
+            configurations.push([words.join(' ')]);
+        } else if (numLines === 2) {
+            // Try different splits for 2 lines
+            for (let splitPoint = 1; splitPoint < words.length; splitPoint++) {
+                const line1 = words.slice(0, splitPoint).join(' ');
+                const line2 = words.slice(splitPoint).join(' ');
+                configurations.push([line1, line2]);
+            }
+        } else if (numLines === 3 && words.length >= 3) {
+            // Try different splits for 3 lines
+            for (let split1 = 1; split1 < words.length - 1; split1++) {
+                for (let split2 = split1 + 1; split2 < words.length; split2++) {
+                    const line1 = words.slice(0, split1).join(' ');
+                    const line2 = words.slice(split1, split2).join(' ');
+                    const line3 = words.slice(split2).join(' ');
+                    configurations.push([line1, line2, line3]);
+                }
+            }
+        }
+    }
+    
+    return configurations;
+}
+
+function breakTextIntoLines(text, maxLines = 3) {
+    if (!text) return [''];
+    
+    // Split on spaces, underscores, and hyphens
+    const words = text.split(/[\s_-]+/).filter(word => word.length > 0);
+    
+    if (words.length === 1) {
+        return [words[0]];
+    }
+    
+    // Generate all possible line configurations
+    const configurations = generateLineConfigurations(words, maxLines);
+    
+    // For now, return the first configuration (will be optimized in the next function)
+    return configurations[0] || [text];
+}
+
+function findOptimalLineConfiguration(text, radius, ctx, zoomLevel, shrinkScale, maxLines = 3) {
+    if (!text) return { lines: [''], fontSize: 5, lineHeight: 6, totalHeight: 5 };
+    
+    // Create cache key based on text and display parameters
+    const cacheKey = `${text}|${Math.round(radius)}|${Math.round(zoomLevel * 100)}|${Math.round(shrinkScale * 100)}|${maxLines}`;
+    
+    // Check cache first
+    if (lineConfigCache.has(cacheKey)) {
+        return lineConfigCache.get(cacheKey);
+    }
+    
+    const words = text.split(/[\s_-]+/).filter(word => word.length > 0);
+    const configurations = generateLineConfigurations(words, maxLines);
+    
+    let bestConfig = {
+        lines: configurations[0] || [text],
+        fontSize: 0,
+        lineHeight: 0,
+        totalHeight: 0
+    };
+    
+    // Test each configuration to find the one that allows the largest font size
+    for (const lines of configurations) {
+        const result = calculateFontSizeForLines(lines, radius, ctx, zoomLevel, shrinkScale);
+        
+        // Choose configuration with largest font size
+        if (result.fontSize > bestConfig.fontSize) {
+            bestConfig = {
+                lines,
+                fontSize: result.fontSize,
+                lineHeight: result.lineHeight,
+                totalHeight: result.totalHeight
+            };
+        }
+    }
+    
+    // Cache the result with size limit
+    if (lineConfigCache.size >= maxCacheSize) {
+        // Remove oldest entry
+        const firstKey = lineConfigCache.keys().next().value;
+        lineConfigCache.delete(firstKey);
+    }
+    lineConfigCache.set(cacheKey, bestConfig);
+    
+    return bestConfig;
+}
+
+function calculateFontSizeForLines(lines, radius, ctx, zoomLevel, shrinkScale) {
+    const maxFontSize = 16 * zoomLevel * shrinkScale;
+    const minFontSize = 5 * zoomLevel * shrinkScale;
+    
+    // Typography constants for circular text
+    const lineHeightRatio = 1.15;
+    const textAreaRatio = 0.78;
+    const availableWidth = (radius * 2) * textAreaRatio;
+    const availableHeight = (radius * 2) * textAreaRatio;
+    
+    let fontSize = maxFontSize;
+    const stepSize = 0.25 * zoomLevel * shrinkScale;
+    
+    ctx.save();
+    
+    while (fontSize >= minFontSize) {
+        ctx.font = `${fontSize}px Arial`;
+        
+        // Calculate typography metrics
+        const lineHeight = fontSize * lineHeightRatio;
+        const totalTextHeight = lines.length * fontSize + (lines.length - 1) * (lineHeight - fontSize);
+        
+        // Check vertical fit first (cheaper calculation)
+        if (totalTextHeight <= availableHeight) {
+            // Check horizontal fit for all lines
+            let allLinesFit = true;
+            
+            for (const line of lines) {
+                const textWidth = ctx.measureText(line).width;
+                if (textWidth > availableWidth) {
+                    allLinesFit = false;
+                    break;
+                }
+            }
+            
+            if (allLinesFit) {
+                ctx.restore();
+                return { 
+                    fontSize, 
+                    lineHeight, 
+                    totalHeight: totalTextHeight
+                };
+            }
+        }
+        
+        fontSize -= stepSize;
+    }
+    
+    ctx.restore();
+    return { 
+        fontSize: minFontSize, 
+        lineHeight: minFontSize * lineHeightRatio,
+        totalHeight: lines.length * minFontSize + (lines.length - 1) * (minFontSize * lineHeightRatio - minFontSize)
+    };
+}
+
 function drawCircle(node) {
     const x = (node.x * zoomLevel) + panX;
     const y = (node.y * zoomLevel) + panY;
     const shrinkScale = getShrinkScale(node.id);
-    const radius = 40 * zoomLevel * shrinkScale;
+    const radius = 53 * zoomLevel * shrinkScale;
     const style = getFamilyStyle(node.id);
     
     // Create glassmorphism effect with background blur
     ctx.save();
+    
+    // Apply focus mode opacity if active
+    const focusOpacity = getFocusOpacity(node.id);
+    if (focusOpacity < 1.0) {
+        ctx.globalAlpha = focusOpacity;
+    }
     
     // Create backdrop blur effect by drawing multiple layered circles
     const blurLayers = 3;
@@ -896,25 +1233,48 @@ function drawCircle(node) {
     
     ctx.restore();
     
-    // Draw text with family color - scale font size with zoom and shrink
+    // Draw multi-line text with proper typography for circular layout
     ctx.fillStyle = style.text;
-    ctx.font = `${12 * zoomLevel * shrinkScale}px Arial`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     
     // Only draw text if zoom level is reasonable for readability
     if (zoomLevel > 0.4) {
-    // Transform the label to shorten common terms
-    const transformedLabel = transformNodeLabel(node.name);
-    
-    // Split long labels into multiple lines
-    const words = transformedLabel.split('_');
-    if (words.length > 1 && transformedLabel.length > 12) {
-        ctx.fillText(words[0], x, y - (6 * zoomLevel * shrinkScale));
-        ctx.fillText(words.slice(1).join('_').slice(0, 10), x, y + (6 * zoomLevel * shrinkScale));
-    } else {
-        ctx.fillText(transformedLabel.slice(0, 12), x, y);
-    }
+        // Transform the label to shorten common terms
+        const transformedLabel = transformNodeLabel(node.name);
+        
+        // Find optimal line configuration that maximizes font size
+        const { lines, fontSize, lineHeight, totalHeight } = findOptimalLineConfiguration(
+            transformedLabel, radius, ctx, zoomLevel, shrinkScale, 3
+        );
+        
+        // Set font for rendering with subtle shadow for better contrast
+        ctx.font = `${fontSize}px Arial`;
+        
+        // Calculate vertical positioning for perfectly centered multi-line text
+        const startY = y - (totalHeight / 2) + (fontSize / 2);
+        
+        // Add subtle text shadow for better readability against glass background
+        ctx.save();
+        
+        // Apply focus mode opacity to text
+        const textFocusOpacity = getFocusOpacity(node.id);
+        if (textFocusOpacity < 1.0) {
+            ctx.globalAlpha = textFocusOpacity;
+        }
+        
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetX = 0.5;
+        ctx.shadowOffsetY = 0.5;
+        
+        // Render each line with optimal vertical spacing
+        lines.forEach((line, index) => {
+            const lineY = startY + (index * lineHeight);
+            ctx.fillText(line, x, lineY);
+        });
+        
+        ctx.restore();
     }
 }
 
@@ -926,8 +1286,14 @@ function drawPaginationControls(node, x, y, radius, style) {
     // Draw page number with glassmorphism
     ctx.save();
     
+    // Apply focus mode opacity to pagination controls
+    const paginationFocusOpacity = getFocusOpacity(node.id);
+    if (paginationFocusOpacity < 1.0) {
+        ctx.globalAlpha = paginationFocusOpacity;
+    }
+    
     // Page number background
-    const pageWidth = 40 * zoomLevel;
+    const pageWidth = 53 * zoomLevel;
     const pageHeight = 20 * zoomLevel;
     const pageX = x - (pageWidth / 2);
     const pageY = pageIndicatorY - (pageHeight / 2);
@@ -1075,7 +1441,7 @@ function redrawCanvas() {
     // Draw all connections first (including those outside viewport)
     ctx.save();
     for (const connection of visibleConnections) {
-        drawLine(connection.parent.x, connection.parent.y, connection.child.x, connection.child.y, connection.child.relation_type);
+        drawLine(connection.parent.x, connection.parent.y, connection.child.x, connection.child.y, connection.child.relation_type, connection.parent.id, connection.child.id);
     }
     ctx.restore();
     
@@ -1092,7 +1458,7 @@ function redrawCanvas() {
         const x = (node.x * zoomLevel) + panX;
         const y = (node.y * zoomLevel) + panY;
         const shrinkScale = getShrinkScale(node.id);
-        const radius = 40 * zoomLevel * shrinkScale;
+        const radius = 53 * zoomLevel * shrinkScale;
         const style = getFamilyStyle(node.id);
         
         drawPaginationControls(node, x, y, radius, style);
@@ -1446,6 +1812,7 @@ async function toggleNode(id) {
     // If children are currently visible, hide them
     if (parent.childrenLoaded && parent.children.some(childId => nodes[childId]?.visible !== false)) {
         hideAllDescendants(id);
+        resetFocusMode(); // Animate focus reset when hiding children
         requestRedraw();
         return;
     }
@@ -1523,6 +1890,9 @@ async function toggleNode(id) {
         await showPaginatedPage(id, 1);
         parent.childrenLoaded = true; // Mark as loaded so UI doesn't block
         
+        // Activate focus mode for parent-children relationship
+        startFocusMode(id);
+        
         // Process remaining children in background if there are any
         if (remainingChildren.length > 0) {
             processRemainingChildrenInBackground(id, remainingChildren);
@@ -1584,6 +1954,9 @@ async function toggleNode(id) {
         // Move other families away with animation
         await moveOtherFamiliesAwayAsync(id, newChildrenPositions);
         parent.childrenLoaded = true;
+        
+        // Activate focus mode for parent-children relationship
+        startFocusMode(id);
         }
         
         // If no animation was triggered, just redraw
@@ -1599,6 +1972,9 @@ async function toggleNode(id) {
         // Show all children for small families
         showDirectChildren(id);
         }
+        
+        // Activate focus mode for parent-children relationship
+        startFocusMode(id);
         requestRedraw();
     }
     } finally {
@@ -1892,9 +2268,12 @@ function updateHoverPanelContent(node, term) {
     // Create a nice description using the correct schema path
     let description = '';
     if (term.definition) {
-    description = term.definition.length > 120 ? 
-        term.definition.substring(0, 120) + '...' : 
-        term.definition;
+    // Remove unwanted unicode characters like '\u0022A' from the beginning
+    let cleanedDefinition = term.definition.replace(/^\\u0022A/, '');
+    
+    description = cleanedDefinition.length > 120 ? 
+        cleanedDefinition.substring(0, 120) + '...' : 
+        cleanedDefinition;
     } else {
     description = 'No description available';
     }
@@ -1987,30 +2366,133 @@ function showTermDetails(id) {
     termInfo.innerHTML += `<p class="text-red-500 text-xs">Error loading details</p>`;
     });
 
-    // Fetch strain data from separate endpoint
+    // Fetch strain data from separate endpoint with caching
     strainList.innerHTML = '<li class="text-gray-500">Loading strains...</li>';
-    fetch(`${apiUrl}/go/${encodeURIComponent(id)}/mmrrc-strains`)
+    
+    // Check cache first
+    const cachedStrains = strainsCache.get(id);
+    if (cachedStrains && Date.now() - cachedStrains.timestamp < cacheTimeout) {
+        renderStrains(id, cachedStrains.data, strainList);
+        return;
+    }
+    
+    // Check if already fetching
+    if (pendingStrainsRequests.has(id)) {
+        pendingStrainsRequests.get(id).then(strains => {
+            renderStrains(id, strains, strainList);
+        });
+        return;
+    }
+    
+    // Fetch with deduplication
+    const strainsPromise = fetch(`${apiUrl}/go/getMmrrcStrains/${encodeURIComponent(id)}`)
     .then(response => response.ok ? response.json() : [])
     .then(strains => {
-        if (strains.length > 0) {
-        strainList.innerHTML = strains.map((strain, index) => 
-            `<li class="my-2 px-2 py-1 rounded ${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}">
-            <a href="https://www.mmrrc.org/catalog/sds.php?mmrrc_id=${strain.mmrrc_id}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline block leading-tight">
-                ${strain.mmrrc_id}
-            </a>
-            <div class="text-xs text-gray-500 leading-tight" style="font-size: 8px;">
-                MMRRC ID: ${strain.mmrrc_id}
-            </div>
-            </li>`
-        ).join('');
-        } else {
-        strainList.innerHTML = '<li class="text-gray-500">No linked strains found</li>';
-        }
+        // Cache the results
+        strainsCache.set(id, {
+            data: strains,
+            timestamp: Date.now()
+        });
+        pendingStrainsRequests.delete(id);
+        return strains;
     })
     .catch(error => {
         console.error('Error loading strain data:', error);
-        strainList.innerHTML = '<li class="text-red-500">Error loading strains</li>';
+        pendingStrainsRequests.delete(id);
+        return [];
     });
+    
+    pendingStrainsRequests.set(id, strainsPromise);
+    
+    strainsPromise.then(strains => {
+        renderStrains(id, strains, strainList);
+    });
+}
+
+// Optimized strain rendering function
+function renderStrains(goId, strains, strainList) {
+    if (strains.length > 0) {
+            // Filter and group strains by blacklist status
+            const { visibleStrains, hiddenStrainsByCollection } = filterAndGroupStrains(strains);
+            
+            let html = '';
+            
+            // Display visible strains first
+            if (visibleStrains.length > 0) {
+                html += visibleStrains.map((strain, index) => 
+                    `<li class="my-2 px-2 py-1 rounded ${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}">
+                    <a href="https://www.mmrrc.org/catalog/sds.php?mmrrc_id=${strain.mmrrc_id}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline block leading-tight">
+                        ${strain.strain_name}
+                    </a>
+                    <div class="text-xs text-gray-500 leading-tight" style="font-size: 8px;">
+                        MMRRC ID: ${strain.mmrrc_id}
+                    </div>
+                    </li>`
+                ).join('');
+            }
+            
+            // Add hidden strains sections grouped by collection
+            const collectionNames = Object.keys(hiddenStrainsByCollection);
+            if (collectionNames.length > 0) {
+                html += `<li class="mt-4 pt-2 border-t border-gray-200">`;
+                
+                collectionNames.forEach(collection => {
+                    const collectionStrains = hiddenStrainsByCollection[collection];
+                    const collectionId = collection.replace(/\s+/g, '-').toLowerCase();
+                    
+                    html += `
+                        <div class="mb-3">
+                            <button id="toggle-collection-${collectionId}-${goId}" class="text-sm text-gray-600 hover:text-blue-600 cursor-pointer underline">
+                                Show ${collectionStrains.length} ${collection}
+                            </button>
+                            <ul id="collection-strains-${collectionId}-${goId}" class="mt-2 hidden">
+                                ${collectionStrains.map(strain => 
+                                    `<li class="my-2 px-2 py-1 rounded bg-red-50 border-l-2 border-red-200">
+                                    <a href="https://www.mmrrc.org/catalog/sds.php?mmrrc_id=${strain.mmrrc_id}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline block leading-tight">
+                                        ${strain.strain_name}
+                                    </a>
+                    <div class="text-xs text-gray-500 leading-tight" style="font-size: 8px;">
+                                        ${strain.source_collection || 'Unknown Source'}
+                                    </div>
+                                    </li>`
+                                ).join('')}
+                            </ul>
+                        </div>
+                    `;
+                });
+                
+                html += `</li>`;
+            }
+            
+            strainList.innerHTML = html;
+            
+            // Add toggle functionality for each collection
+            collectionNames.forEach(collection => {
+                const collectionStrains = hiddenStrainsByCollection[collection];
+                const collectionId = collection.replace(/\s+/g, '-').toLowerCase();
+                
+                const toggleButton = document.getElementById(`toggle-collection-${collectionId}-${goId}`);
+                const strainsContainer = document.getElementById(`collection-strains-${collectionId}-${goId}`);
+                
+                if (toggleButton && strainsContainer) {
+                    let isVisible = false;
+                    
+                    toggleButton.addEventListener('click', () => {
+                        isVisible = !isVisible;
+                        if (isVisible) {
+                            strainsContainer.classList.remove('hidden');
+                            toggleButton.textContent = `Hide ${collectionStrains.length} ${collection}`;
+                        } else {
+                            strainsContainer.classList.add('hidden');
+                            toggleButton.textContent = `Show ${collectionStrains.length} ${collection}`;
+                        }
+                    });
+                }
+            });
+            
+        } else {
+            strainList.innerHTML = '<li class="text-gray-500">No linked strains found</li>';
+        }
 }
 
 // Pan the canvas
@@ -2033,7 +2515,7 @@ canvas.addEventListener("mousedown", (e) => {
     
     const dx = mousePos.x - node.x;
     const dy = mousePos.y - node.y;
-    if (dx * dx + dy * dy <= 40 * 40) {
+    if (dx * dx + dy * dy <= 53 * 53) {
         clickedNode = node;
         break;
     }
@@ -2148,6 +2630,17 @@ canvas.addEventListener("mouseleave", () => {
     cancelAnimationFrame(shrinkingAnimationId);
     shrinkingAnimationId = null;
     }
+    
+    // Reset focus mode when mouse leaves canvas  
+    if (focusAnimationId) {
+        cancelAnimationFrame(focusAnimationId);
+        focusAnimationId = null;
+    }
+    focusMode = false;
+    focusedNodeId = null;
+    focusedRelationships.clear();
+    focusTransitioning = false;
+    focusAnimationStartTime = null;
 });
 
 canvas.addEventListener("mouseup", (e) => {
