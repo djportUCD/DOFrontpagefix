@@ -9,6 +9,31 @@
     .go-term-text:hover {
       text-decoration: underline;
     }
+    
+    /* Smooth transitions */
+    .go-term-text {
+      transition: color 0.2s ease;
+    }
+    
+    /* Loading animation */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .pulse {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    /* Better scroll behavior */
+    .overflow-y-auto {
+      scroll-behavior: smooth;
+    }
+    
+    /* Prefetch indicator (subtle highlight on hover) */
+    .go-term-text:hover {
+      color: #2563eb;
+    }
   </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
