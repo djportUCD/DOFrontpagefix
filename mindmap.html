@@ -1,75 +1,109 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MMRRC GO Term Mind Map</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MMRRC GO Term Mind Map</title>
+    
+    <!-- Bootstrap 3 CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style-modern.css">
 </head>
-<body class="bg-gray-100">
-  <div class="mx-auto my-6 max-w-[1130px] max-h-[475px] flex h-screen">
-    <!-- Column 1 -->
-    <div id="canvas-wrapper" class="w-3/4 bg-white border-r relative canvas-wrapper">
-      <canvas id="canvas" class="infinite-canvas" width="2000" height="2000"></canvas>
-      
-      <!-- Info Icon -->
-      <div id="info-icon" class="info-icon">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="rgba(0, 0, 0, 0.7)"/>
-        </svg>
-      </div>
-      
-      <!-- Legend Panel -->
-      <div id="legend-panel" class="legend-panel">
-        <button id="close-legend" class="close-button">✗</button>
-        <h3>Legend</h3>
-        <div class="legend-item">
-          <div class="legend-line" style="background-color: #3490dc;"></div>
-          <span> is a</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-line" style="background-color: #38c172;"></div>
-          <span> part of</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-line" style="background-color: #ffed4a;"></div>
-          <span> positively regulates</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-line" style="background-color: #8b0000;"></div>
-          <span> negatively regulates</span>
-        </div>
-        <div class="legend-item">
-          <div class="legend-line" style="background-color: #1a237e;"></div>
-          <span> regulates</span>
-        </div>
-        <div class="legend-item" style="margin-top: 12px;">
-          <span style="font-weight: 600;">&nbsp;↕️&nbsp;&nbsp;&nbsp;&nbsp;Scroll to Zoom</span>
-        </div>
-      </div>
-      
-      <div id="hover-panel" class="hover-panel">
-        <h4 id="hover-title">Term Name</h4>
-        <p id="hover-description">Loading...</p>
-        <div id="hover-id" class="term-id">GO:0000000</div>
-      </div>
-      <div id="toast-notification" class="toast-notification">
-        No child GO terms
-      </div>
-    </div>
+<body>
+    <div class="container-fluid" style="margin-top: 20px;">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="panel panel-default">
+                    <div class="panel-heading">
+                        <h4 class="panel-title">MMRRC GO Term Mind Map</h4>
+                    </div>
 
-    <!-- Column 2 -->
-    <div id="details" class="w-1/4 p-4 overflow-y-auto overflow-x-hidden">
-      <h2 class="text-xl font-semibold mb-2">GO Term Details</h2>
-      <div id="term-info" class="mb-4">
-        <p class="text-gray-600">Click a term to see details</p>
-      </div>
-      <h3 class="text-lg font-semibold mb-2">Related Mouse Strains</h3>
-      <ul id="strainList" class="list-disc list-inside text-blue-600"></ul>
-    </div>
-  </div>
+                    <div class="panel-body">
+                        <div class="row">
+                            <div class="col-sm-9">
+                                <div id="canvas-wrapper" class="canvas-wrapper">
+                                    <canvas id="canvas" class="infinite-canvas" width="2000" height="2000"></canvas>
 
-  <script src="mindmap.js"></script>
+                                    <!-- Info / Legend toggle -->
+                                    <button id="info-icon" type="button" class="btn btn-default btn-xs info-icon" title="Legend">
+                                        <span class="glyphicon glyphicon-info-sign" aria-hidden="true"></span>
+                                        <span class="sr-only">Open Legend</span>
+                                    </button>
+
+                                    <!-- Legend Panel -->
+                                    <div id="legend-panel" class="legend-panel">
+                                        <div class="panel panel-default">
+                                            <div class="panel-heading">
+                                                <strong>Legend</strong>
+                                                <button id="close-legend" type="button" class="close" aria-label="Close">
+                                                    <span aria-hidden="true">&times;</span>
+                                                </button>
+                                            </div>
+                                            <div class="panel-body">
+                                                <ul class="legend-list">
+                                                    <li><span class="legend-line" style="background-color:#3490dc;"></span> is a</li>
+                                                    <li><span class="legend-line" style="background-color:#38c172;"></span> part of</li>
+                                                    <li><span class="legend-line" style="background-color:#ffed4a;"></span> positively regulates</li>
+                                                    <li><span class="legend-line" style="background-color:#8b0000;"></span> negatively regulates</li>
+                                                    <li><span class="legend-line" style="background-color:#1a237e;"></span> regulates</li>
+                                                </ul>
+                                                <p class="text-muted" style="margin-top:12px;">
+                                                    <span class="glyphicon glyphicon-resize-vertical" aria-hidden="true"></span>
+                                                    <strong> Scroll to zoom</strong>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Hover Panel (follows cursor) -->
+                                    <div id="hover-panel" class="hover-panel panel panel-info">
+                                        <div class="panel-heading">
+                                            <h5 id="hover-title" class="panel-title" style="margin:0;">Term Name</h5>
+                                        </div>
+                                        <div class="panel-body">
+                                            <p id="hover-description" style="margin-bottom:6px;">Loading...</p>
+                                            <div id="hover-id" class="term-id">GO:0000000</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Toast -->
+                                    <div id="toast-notification" class="toast-notification alert alert-warning" role="alert" aria-live="polite">
+                                        No child GO terms
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Details Column  -->
+                            <div class="col-sm-3">
+                                <div id="details" class="panel panel-default">
+                                    <div class="panel-heading">
+                                        <h5 class="panel-title">GO Term Details</h5>
+                                    </div>
+                                    <div class="panel-body">
+                                        <div id="term-info">
+                                            <p class="text-muted">Click a term to see details</p>
+                                        </div>
+
+                                        <h5><strong>Related Mouse Strains</strong></h5>
+                                        <ul id="strainList" class="list-unstyled"></ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div><!-- /.row -->
+                    </div><!-- /.panel-body -->
+                </div><!-- /.panel -->
+            </div><!-- /.col-md-12 -->
+        </div><!-- /.row -->
+    </div><!-- /.container-fluid -->
+
+    <!-- Bootstrap 3 JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+    
+    <!-- Mind Map JS -->
+    <script src="mindmap.js"></script>
 </body>
 </html>
