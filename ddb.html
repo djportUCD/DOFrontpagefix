@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MMRRC Strain GO Term Browser</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .go-term-text:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div class="max-w-[1130px] mx-auto p-6">
+    <h1 class="text-2xl font-bold mb-4">MMRRC GO Term Browser</h1>
+    <div class="grid grid-cols-3 gap-4">
+      
+      <!-- Column 1: GO Hierarchy -->
+      <div class="col-span-1 bg-white rounded-lg shadow p-4 overflow-y-auto max-h-[80vh]">
+        <ul id="go-tree" class="space-y-2 text-sm"></ul>
+      </div>
+      
+      <!-- Column 2: Strain Details -->
+      <div class="col-span-2 bg-white rounded-lg shadow p-4 overflow-y-auto max-h-[80vh]">
+        <h2 class="text-xl font-semibold mb-2" id="selected-go-label">Select a GO Term</h2>
+        <ol id="strain-list" class="list-decimal list-inside space-y-1"></ol>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="ddb.js"></script>
+</body>
+</html>
